@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioHelix - Interactive DNA Sequence Analyzer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                        },
+                        bio: {
+                            adenine: '#3b82f6',   // Blue
+                            thymine: '#eab308',   // Yellow
+                            cytosine: '#ef4444',  // Red
+                            guanine: '#10b981',   // Green
+                            uracil: '#a855f7',    // Purple
+                            other: '#6b7280'      // Gray
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'Monaco', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(156, 163, 175, 0.1);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.3);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.5);
+        }
+        .codon-group {
+            display: inline-block;
+            margin-right: 0.35rem;
+            padding: 0.1rem 0.25rem;
+            border-radius: 0.25rem;
+            transition: all 0.15s ease;
+        }
+        .codon-group:hover {
+            background-color: rgba(59, 130, 246, 0.15);
+        }
+        .aa-met { background-color: rgba(34, 197, 94, 0.25); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.4); font-weight: 600; }
+        .dark .aa-met { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
+        .aa-stop { background-color: rgba(239, 68, 68, 0.25); color: #b91c1c; border: 1px solid rgba(239, 68, 68, 0.4); font-weight: 600; }
+        .dark .aa-stop { background-color: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-full font-sans transition-colors duration-200 flex flex-col">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 right-5 z-50 transform translate-y-[-100px] opacity-0 transition-all duration-300 ease-out bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700 dark:border-slate-300">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400 dark:text-emerald-600"></i>
+        <span id="toast-message" class="text-sm font-medium">Copied to clipboard!</span>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400">
+                    <i data-lucide="dna" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                        BioHelix <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 font-mono font-semibold">v2.0</span>
+                    </h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Interactive DNA & Protein Analysis Suite</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="theme-toggle" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Toggle Theme">
+                    <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+                    <i data-lucide="moon" class="w-5 h-5 block dark:hidden"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Top Input & Quick Load Section -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 lg:p-6 transition-all">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <i data-lucide="terminal" class="w-4 h-4 text-emerald-500"></i> DNA Sequence Input
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Enter raw genomic or cDNA sequence data below.</p>
+                </div>
+
+                <!-- Sample Presets -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-medium text-slate-400 dark:text-slate-500 mr-1">Presets:</span>
+                    <button onclick="loadPreset('insulin')" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors">
+                        Insulin
+                    </button>
+                    <button onclick="loadPreset('gfp')" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors">
+                        GFP Gene
+                    </button>
+                    <button onclick="loadPreset('hemoglobin')" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors">
+                        Hemoglobin Beta
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sequence Textarea Input -->
+            <div class="relative group">
+                <textarea id="dna-input" rows="4" 
+                    class="w-full font-mono text-sm tracking-wide p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all resize-y text-slate-800 dark:text-slate-200 placeholder-slate-400 custom-scrollbar uppercase"
+                    placeholder="Enter or paste DNA sequence (e.g. ATGCGATCGATCGATCG...)"
+                    spellcheck="false"></textarea>
+                
+                <div class="absolute right-3 bottom-3 flex items-center space-x-2">
+                    <button onclick="clearSequence()" class="px-2.5 py-1 text-xs font-medium bg-slate-200/80 dark:bg-slate-800 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 text-slate-600 dark:text-slate-400 rounded-lg transition-colors flex items-center gap-1">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Action Controls Bar -->
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div class="flex items-center space-x-2">
+                    <button onclick="cleanSequence()" class="px-3 py-1.5 text-xs font-medium bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Sanitize & Clean Input
+                    </button>
+                    <span class="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">(removes numbers, spaces, non-IUPAC characters)</span>
+                </div>
+
+                <div class="flex items-center space-x-3 text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    <div>Length: <span id="raw-length" class="font-bold text-slate-800 dark:text-slate-200">0</span> bp</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metric Overview Stat Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Total Length -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Total Nucleotides</span>
+                    <div class="p-2 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-lg">
+                        <i data-lucide="binary" class="w-4 h-4"></i>
+                    </div>
+                </div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="stat-length" class="text-2xl font-bold font-mono text-slate-900 dark:text-white">0</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">bp</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Clean sequence length</p>
+            </div>
+
+            <!-- GC Content -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">GC Content</span>
+                        <div class="group relative cursor-help">
+                            <i data-lucide="help-circle" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-[11px] rounded-lg shadow-lg z-50">
+                                Proportion of Guanine (G) and Cytosine (C) bases. Higher GC content increases DNA thermal stability.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                        <i data-lucide="gauge" class="w-4 h-4"></i>
+                    </div>
+                </div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="stat-gc" class="text-2xl font-bold font-mono text-slate-900 dark:text-white">0.0%</span>
+                </div>
+                <!-- Progress Bar -->
+                <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+                    <div id="stat-gc-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- AT Ratio -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-slate-500 dark:text-slate-400">AT Content</span>
+                    <div class="p-2 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-lg">
+                        <i data-lucide="pie-chart" class="w-4 h-4"></i>
+                    </div>
+                </div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="stat-at" class="text-2xl font-bold font-mono text-slate-900 dark:text-white">0.0%</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+                    <div id="stat-at-bar" class="bg-amber-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Molecular Weight Est. -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Est. Mol. Weight</span>
+                        <div class="group relative cursor-help">
+                            <i data-lucide="help-circle" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-[11px] rounded-lg shadow-lg z-50">
+                                Approximate molecular mass based on average ssDNA nucleotide mass (~650 Da/bp for dsDNA).
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 rounded-lg">
+                        <i data-lucide="weight" class="w-4 h-4"></i>
+                    </div>
+                </div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="stat-mw" class="text-2xl font-bold font-mono text-slate-900 dark:text-white">0</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">kDa</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Double-stranded DNA approx.</p>
+            </div>
+        </div>
+
+        <!-- Main Breakdown & Results Layout Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Left Column: Nucleotide Distribution & Visualization -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Base Composition Card -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-500"></i> Nucleotide Composition
+                    </h3>
+
+                    <!-- Donut Chart Container -->
+                    <div class="relative w-48 h-48 mx-auto mb-4">
+                        <canvas id="baseChart"></canvas>
+                    </div>
+
+                    <!-- Detailed Breakdown Legend List -->
+                    <div class="space-y-2 font-mono text-xs">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Adenine (A)</span>
+                            </div>
+                            <span class="text-slate-900 dark:text-slate-100 font-semibold"><span id="cnt-a">0</span> (<span id="pct-a">0%</span>)</span>
+                        </div>
+
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Thymine (T)</span>
+                            </div>
+                            <span class="text-slate-900 dark:text-slate-100 font-semibold"><span id="cnt-t">0</span> (<span id="pct-t">0%</span>)</span>
+                        </div>
+
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Cytosine (C)</span>
+                            </div>
+                            <span class="text-slate-900 dark:text-slate-100 font-semibold"><span id="cnt-c">0</span> (<span id="pct-c">0%</span>)</span>
+                        </div>
+
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Guanine (G)</span>
+                            </div>
+                            <span class="text-slate-900 dark:text-slate-100 font-semibold"><span id="cnt-g">0</span> (<span id="pct-g">0%</span>)</span>
+                        </div>
+
+                        <div id="other-row" class="hidden flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-gray-400"></span>
+                                <span class="font-medium">Other/Degenerate (N/etc)</span>
+                            </div>
+                            <span class="font-semibold"><span id="cnt-other">0</span> (<span id="pct-other">0%</span>)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Sequence Conversions & Protein Translation -->
+            <div class="lg:col-span-2 space-y-6">
+
+                <!-- Nucleic Acid Conversion Output Cards -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <i data-lucide="git-compare" class="w-4 h-4 text-emerald-500"></i> Nucleic Acid Transformations
+                    </h3>
+
+                    <!-- Complementary Strand -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                                Complementary DNA Strand <span class="font-mono text-[10px] text-slate-400">(3' &rarr; 5')</span>
+                            </label>
+                            <button onclick="copyToClipboard('out-comp')" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 font-medium">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
+                            </button>
+                        </div>
+                        <div id="out-comp" class="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-xs break-all custom-scrollbar max-h-24 overflow-y-auto select-all text-slate-800 dark:text-slate-200">
+                            -
+                        </div>
+                    </div>
+
+                    <!-- Reverse Complement Strand -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                                Reverse Complement DNA Strand <span class="font-mono text-[10px] text-slate-400">(5' &rarr; 3')</span>
+                            </label>
+                            <button onclick="copyToClipboard('out-revcomp')" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 font-medium">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
+                            </button>
+                        </div>
+                        <div id="out-revcomp" class="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-xs break-all custom-scrollbar max-h-24 overflow-y-auto select-all text-slate-800 dark:text-slate-200">
+                            -
+                        </div>
+                    </div>
+
+                    <!-- mRNA Transcribed -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                                Transcribed mRNA Sequence <span class="font-mono text-[10px] text-slate-400">(5' &rarr; 3', T replaced with U)</span>
+                            </label>
+                            <button onclick="copyToClipboard('out-rna')" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 font-medium">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
+                            </button>
+                        </div>
+                        <div id="out-rna" class="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-xs break-all custom-scrollbar max-h-24 overflow-y-auto select-all text-slate-800 dark:text-slate-200">
+                            -
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Protein Translation Engine -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <i data-lucide="dna-off" class="w-4 h-4 text-emerald-500"></i> Translated Amino Acid Sequence
+                        </h3>
+
+                        <!-- Translation Options Bar -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- Frame Selector -->
+                            <select id="orf-frame" onchange="updateAnalysis()" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-emerald-500">
+                                <option value="1">Frame +1 (5'&rarr;3')</option>
+                                <option value="2">Frame +2 (5'&rarr;3')</option>
+                                <option value="3">Frame +3 (5'&rarr;3')</option>
+                                <option value="-1">Frame -1 (Rev Comp)</option>
+                                <option value="-2">Frame -2 (Rev Comp)</option>
+                                <option value="-3">Frame -3 (Rev Comp)</option>
+                            </select>
+
+                            <!-- Code Format Toggle -->
+                            <select id="aa-format" onchange="updateAnalysis()" class="px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-emerald-500">
+                                <option value="single">Single-Letter Code (e.g. M, V, L)</option>
+                                <option value="triple">Three-Letter Code (e.g. Met, Val, Leu)</option>
+                            </select>
+
+                            <button onclick="copyToClipboard('out-protein-raw')" class="px-2.5 py-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 font-medium bg-emerald-50 dark:bg-emerald-950/40 rounded-lg">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Protein
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Codons & Amino Acid Visualization Block -->
+                    <div class="space-y-3">
+                        <!-- Grouped Visual Display -->
+                        <div class="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-xs leading-relaxed custom-scrollbar max-h-48 overflow-y-auto" id="out-protein-formatted">
+                            <span class="text-slate-400 italic">Enter a valid DNA sequence to visualize translated codons...</span>
+                        </div>
+
+                        <!-- Hidden Raw Protein string for easy copying -->
+                        <div id="out-protein-raw" class="hidden"></div>
+
+                        <!-- Legend & Statistics -->
+                        <div class="flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
+                            <div class="flex items-center space-x-3">
+                                <span class="flex items-center gap-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Start (Met/M)
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Stop (*)
+                                </span>
+                            </div>
+                            <div>
+                                Total Amino Acids: <span id="protein-length" class="font-bold text-slate-800 dark:text-slate-200">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-4 text-center text-xs text-slate-500 dark:text-slate-400">
+        <p>BioHelix Genomic Workbench &bull; Client-side analysis &bull; Fast, secure & local computation</p>
+    </footer>
+
+    <!-- Logic JavaScript -->
+    <script>
+        // Preset Sequences
+        const PRESETS = {
+            insulin: "ATGGCCCTGTGGATGCGCCTCCTGCCCCTGCTGGCGCTGCTGGCCCTCTGGGGACCTGACCCAGCCGCAGCCTTTGTGAACCAACACCTGTGCGGCTCACACCTGGTGGAAGCTCTCTACCTAGTGTGCGGGGAACGAGGCTTCTTCTACACACCCAAGACCCGCCGGGAGGCAGAGGACCTGCAGGTGGGGCAGGTGGAGCTGGGCGGGGGCCCTGGTGCAGGCAGCCTGCAGCCCTTGGCCCTGGAGGGGTCCCTGCAGAAGCGTGGCATTGTGGAACAATGCTGTACCAGCATCTGCTCCCTCTACCAGCTGGAGAACTACTGCAACTAG",
+            gfp: "ATGAGTAAAGGAGAAGAACTTTTCACTGGAGTTGTCCCAATTCTTGTTGAATTAGATGGTGATGTTAATGGGCACAAATTTTCTGTCAGTGGAGAGGGTGAAGGTGATGCAACATACGGAAAACTTACCCTTAAATTTATTTGCACTACTGGAAAACTACCTGTTCCATGGCCAACACTTGTCACTACTTTCACTTATGGTGTTCAATGCTTTTCAAGATACCCAGATCATATGAAACAGCATGACTTTTTCAAGAGTGCCATGCCCGAAGGTTATGTACAGGAAAGAACTATATTTTTCAAAGATGACGGGAACTACAAGACACGTGCTGAAGTCAAGTTTGAAGGTGATACCCTTGTTAATAGAATCGAGTTAAAAGGTATTGATTTTAAAGAAGATGGAAACATTCTTGGACACAAATTGGAATACAACTATAACTCACACAATGTATACATCATGGCAGACAAACAAAAGAATGGAATCAAAGTTAACTTCAAAATTAGACACAACATTGAAGATGGAAGCGTTCAACTAGCAGACCATTATCAACAAAATACTCCAATTGGCGATGGCCCTGTCCTTTTACCAGACAACCATTACCTSTCCACACAATCTGCCCTTTCGAAAGATCCCAACGAAAAGAGAGACCACATGGTCCTTCTTGAGTTTGTAACAGCTGCTGGGATTACACATGGCATGGATGAACTATACAAATAG",
+            hemoglobin: "ATGGTGCACCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTGAACGTGGATGAAGTTGGTGGTGAGGCCCTGGGCAGGCTGCTGGTGGTCTACCCTTGGACCCAGAGGTTCTTTGAGTCCTTTGGGGATCTGTCCACTCCTGATGCTGTTATGGGCAACCCTAAGGTGAAGGCTCATGGCAAGAAGGTGCTCGGTGCCTTTAGTGATGGCCTAGCTCACCTGGACAACCTCAAGGGCACCTTTGCCACACTGAGTGAGCTGCACTGTGACAAGCTGCACGTGGATCCTGAGAACTTCAGGCTCCTGGGCAACGTGCTGGTCTGTGTGCTGGCCCATCACTTTGGCAAAGAATTCACCCCACCAGTGCAGGCTGCCTATCAGAAAGTGGTGGCTGGTGTGGCTAATGCCCTGGCCCACAAGTACCACTAA"
+        };
+
+        // Genetic Code Standard Codon Table
+        const CODON_TABLE = {
+            'ATT': {s:'I', t:'Ile'}, 'ATC': {s:'I', t:'Ile'}, 'ATA': {s:'I', t:'Ile'},
+            'CTT': {s:'L', t:'Leu'}, 'CTC': {s:'L', t:'Leu'}, 'CTA': {s:'L', t:'Leu'}, 'CTG': {s:'L', t:'Leu'}, 'TTA': {s:'L', t:'Leu'}, 'TTG': {s:'L', t:'Leu'},
+            'GTT': {s:'V', t:'Val'}, 'GTC': {s:'V', t:'Val'}, 'GTA': {s:'V', t:'Val'}, 'GTG': {s:'V', t:'Val'},
+            'TTT': {s:'F', t:'Phe'}, 'TTC': {s:'F', t:'Phe'},
+            'ATG': {s:'M', t:'Met'},
+            'TGT': {s:'C', t:'Cys'}, 'TGC': {s:'C', t:'Cys'},
+            'GCT': {s:'A', t:'Ala'}, 'GCC': {s:'A', t:'Ala'}, 'GCA': {s:'A', t:'Ala'}, 'GCG': {s:'A', t:'Ala'},
+            'GGT': {s:'G', t:'Gly'}, 'GGC': {s:'G', t:'Gly'}, 'GGA': {s:'G', t:'Gly'}, 'GGG': {s:'G', t:'Gly'},
+            'CCT': {s:'P', t:'Pro'}, 'CCC': {s:'P', t:'Pro'}, 'CCA': {s:'P', t:'Pro'}, 'CCG': {s:'P', t:'Pro'},
+            'ACT': {s:'T', t:'Thr'}, 'ACC': {s:'T', t:'Thr'}, 'ACA': {s:'T', t:'Thr'}, 'ACG': {s:'T', t:'Thr'},
+            'TCT': {s:'S', t:'Ser'}, 'TCC': {s:'S', t:'Ser'}, 'TCA': {s:'S', t:'Ser'}, 'TCG': {s:'S', t:'Ser'}, 'AGT': {s:'S', t:'Ser'}, 'AGC': {s:'S', t:'Ser'},
+            'TAT': {s:'Y', t:'Tyr'}, 'TAC': {s:'Y', t:'Tyr'},
+            'TGG': {s:'W', t:'Trp'},
+            'CAA': {s:'Q', t:'Gln'}, 'CAG': {s:'Q', t:'Gln'},
+            'AAT': {s:'N', t:'Asn'}, 'AAC': {s:'N', t:'Asn'},
+            'CAT': {s:'H', t:'His'}, 'CAC': {s:'H', t:'His'},
+            'GAA': {s:'E', t:'Glu'}, 'GAG': {s:'E', t:'Glu'},
+            'GAT': {s:'D', t:'Asp'}, 'GAC': {s:'D', t:'Asp'},
+            'AAA': {s:'K', t:'Lys'}, 'AAG': {s:'K', t:'Lys'},
+            'CGT': {s:'R', t:'Arg'}, 'CGC': {s:'R', t:'Arg'}, 'CGA': {s:'R', t:'Arg'}, 'CGG': {s:'R', t:'Arg'}, 'AGA': {s:'R', t:'Arg'}, 'AGG': {s:'R', t:'Arg'},
+            'TAA': {s:'*', t:'Stop'}, 'TAG': {s:'*', t:'Stop'}, 'TGA': {s:'*', t:'Stop'}
+        };
+
+        let baseChart = null;
+
+        // Initialize App & Events
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initChart();
+
+            // Input listeners
+            const inputEl = document.getElementById('dna-input');
+            inputEl.addEventListener('input', updateAnalysis);
+
+            // Theme toggle logic
+            const themeBtn = document.getElementById('theme-toggle');
+            themeBtn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                updateChartColors();
+            });
+
+            // Load default preset
+            loadPreset('insulin');
+        });
+
+        // Initialize Chart.js Donut
+        function initChart() {
+            const ctx = document.getElementById('baseChart').getContext('2d');
+            baseChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Adenine (A)', 'Thymine (T)', 'Cytosine (C)', 'Guanine (G)', 'Other'],
+                    datasets: [{
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: [
+                            '#3b82f6', // A
+                            '#eab308', // T
+                            '#ef4444', // C
+                            '#10b981', // G
+                            '#9ca3af'  // Other
+                        ],
+                        borderWidth: 2,
+                        borderColor: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ${context.raw} bp`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        function updateChartColors() {
+            if (baseChart) {
+                baseChart.data.datasets[0].borderColor = document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff';
+                baseChart.update();
+            }
+        }
+
+        // Clean & Format Sequence String
+        function sanitizeSequence(seq) {
+            return seq.toUpperCase().replace(/[^ATCGN]/g, '');
+        }
+
+        function cleanSequence() {
+            const inputEl = document.getElementById('dna-input');
+            inputEl.value = sanitizeSequence(inputEl.value);
+            updateAnalysis();
+            showToast("Sequence cleaned and formatted!");
+        }
+
+        function clearSequence() {
+            document.getElementById('dna-input').value = '';
+            updateAnalysis();
+        }
+
+        function loadPreset(key) {
+            if (PRESETS[key]) {
+                document.getElementById('dna-input').value = PRESETS[key];
+                updateAnalysis();
+            }
+        }
+
+        // Calculation Engine & Updates
+        function updateAnalysis() {
+            const rawSeq = document.getElementById('dna-input').value;
+            document.getElementById('raw-length').textContent = rawSeq.length;
+
+            const cleanSeq = sanitizeSequence(rawSeq);
+            const len = cleanSeq.length;
+
+            // Stat updates
+            document.getElementById('stat-length').textContent = len.toLocaleString();
+
+            if (len === 0) {
+                resetOutputs();
+                return;
+            }
+
+            // Count Nucleotides
+            let countA = 0, countT = 0, countC = 0, countG = 0, countOther = 0;
+            for (let char of cleanSeq) {
+                if (char === 'A') countA++;
+                else if (char === 'T') countT++;
+                else if (char === 'C') countC++;
+                else if (char === 'G') countG++;
+                else countOther++;
+            }
+
+            // Percentages
+            const pctA = ((countA / len) * 100).toFixed(1);
+            const pctT = ((countT / len) * 100).toFixed(1);
+            const pctC = ((countC / len) * 100).toFixed(1);
+            const pctG = ((countG / len) * 100).toFixed(1);
+            const pctOther = ((countOther / len) * 100).toFixed(1);
+
+            const gcCount = countG + countC;
+            const gcPct = ((gcCount / len) * 100).toFixed(1);
+            const atPct = (((countA + countT) / len) * 100).toFixed(1);
+
+            // Molecular weight estimate (approx 650 g/mol per base pair dsDNA)
+            const mw = ((len * 650) / 1000).toFixed(1);
+
+            // Update DOM Stats
+            document.getElementById('stat-gc').textContent = `${gcPct}%`;
+            document.getElementById('stat-gc-bar').style.width = `${gcPct}%`;
+            document.getElementById('stat-at').textContent = `${atPct}%`;
+            document.getElementById('stat-at-bar').style.width = `${atPct}%`;
+            document.getElementById('stat-mw').textContent = mw;
+
+            // Base breakdowns
+            document.getElementById('cnt-a').textContent = countA;
+            document.getElementById('pct-a').textContent = `${pctA}%`;
+            document.getElementById('cnt-t').textContent = countT;
+            document.getElementById('pct-t').textContent = `${pctT}%`;
+            document.getElementById('cnt-c').textContent = countC;
+            document.getElementById('pct-c').textContent = `${pctC}%`;
+            document.getElementById('cnt-g').textContent = countG;
+            document.getElementById('pct-g').textContent = `${pctG}%`;
+
+            const otherRow = document.getElementById('other-row');
+            if (countOther > 0) {
+                otherRow.classList.remove('hidden');
+                document.getElementById('cnt-other').textContent = countOther;
+                document.getElementById('pct-other').textContent = `${pctOther}%`;
+            } else {
+                otherRow.classList.add('hidden');
+            }
+
+            // Update Chart
+            baseChart.data.datasets[0].data = [countA, countT, countC, countG, countOther];
+            baseChart.update();
+
+            // Complementary & Reverse Complement Strand Calculation
+            const compStrand = getComplement(cleanSeq);
+            const revCompStrand = compStrand.split('').reverse().join('');
+            const rnaSeq = cleanSeq.replace(/T/g, 'U');
+
+            document.getElementById('out-comp').textContent = compStrand;
+            document.getElementById('out-revcomp').textContent = revCompStrand;
+            document.getElementById('out-rna').textContent = rnaSeq;
+
+            // Translation Logic
+            translateProtein(cleanSeq, revCompStrand);
+        }
+
+        function getComplement(seq) {
+            const map = { 'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N' };
+            return seq.split('').map(b => map[b] || 'N').join('');
+        }
+
+        function translateProtein(dnaSeq, revCompSeq) {
+            const frameVal = parseInt(document.getElementById('orf-frame').value);
+            const aaFormat = document.getElementById('aa-format').value;
+
+            let sourceSeq = frameVal > 0 ? dnaSeq : revCompSeq;
+            let offset = Math.abs(frameVal) - 1;
+
+            let targetSeq = sourceSeq.substring(offset);
+            let formattedHTML = '';
+            let rawProtein = '';
+            let aaCount = 0;
+
+            for (let i = 0; i < targetSeq.length - 2; i += 3) {
+                let codon = targetSeq.substring(i, i + 3);
+                let aaObj = CODON_TABLE[codon] || { s: 'X', t: 'Xaa' };
+
+                let aaCode = aaFormat === 'single' ? aaObj.s : aaObj.t;
+                rawProtein += aaObj.s;
+                aaCount++;
+
+                let classAttr = 'codon-group';
+                if (aaObj.s === 'M') classAttr += ' aa-met';
+                if (aaObj.s === '*') classAttr += ' aa-stop';
+
+                formattedHTML += `<span class="${classAttr}" title="Codon: ${codon} &rarr; ${aaObj.t}">
+                    <span class="text-[10px] block opacity-60 font-sans uppercase">${codon}</span>
+                    <span>${aaCode}</span>
+                </span>`;
+            }
+
+            const formattedContainer = document.getElementById('out-protein-formatted');
+            if (aaCount > 0) {
+                formattedContainer.innerHTML = formattedHTML;
+            } else {
+                formattedContainer.innerHTML = '<span class="text-slate-400 italic">Sequence too short for selected reading frame.</span>';
+            }
+
+            document.getElementById('out-protein-raw').textContent = rawProtein;
+            document.getElementById('protein-length').textContent = aaCount;
+        }
+
+        function resetOutputs() {
+            document.getElementById('stat-gc').textContent = '0.0%';
+            document.getElementById('stat-gc-bar').style.width = '0%';
+            document.getElementById('stat-at').textContent = '0.0%';
+            document.getElementById('stat-at-bar').style.width = '0%';
+            document.getElementById('stat-mw').textContent = '0';
+
+            ['a','t','c','g','other'].forEach(k => {
+                document.getElementById(`cnt-${k}`).textContent = '0';
+                document.getElementById(`pct-${k}`).textContent = '0%';
+            });
+
+            document.getElementById('out-comp').textContent = '-';
+            document.getElementById('out-revcomp').textContent = '-';
+            document.getElementById('out-rna').textContent = '-';
+            document.getElementById('out-protein-formatted').innerHTML = '<span class="text-slate-400 italic">Enter a valid DNA sequence to visualize translated codons...</span>';
+            document.getElementById('protein-length').textContent = '0';
+
+            baseChart.data.datasets[0].data = [0, 0, 0, 0, 0];
+            baseChart.update();
+        }
+
+        // Copy Utility
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent.trim();
+            if (!text || text === '-') return;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            showToast("Copied to clipboard!");
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = message;
+            toast.classList.remove('translate-y-[-100px]', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-[-100px]', 'opacity-0');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
